@@ -1,11 +1,10 @@
 use embedded_io::{Read, ReadReady, Write};
+use zerocopy::{FromBytes, IntoBytes, Ref};
 
-use crate::PmsU16Int;
 use crate::frame::Pms7003CommandFrame;
+use crate::{Pms7003DataFrame, PmsU16Int};
 
 // type ActivatedUartDevice<D, P> = hal::uart::UartPeripheral<hal::uart::Enabled, D, P>;
-
-const PMS7003MAGIC: u16 = 0x424d;
 
 pub struct Pms7003Controller<S, T> {
     uart: S,
@@ -20,6 +19,25 @@ impl<S, T> Pms7003Controller<S, T> {
 
         PmsU16Int::new(sum as u16).to_bytes()
     }
+
+    fn write_checksum(buf: &mut [u8]) {
+        let rest_of_buf_len = buf.len() - 2;
+        let checksum = Self::compute_checksum(buf);
+        buf[..=rest_of_buf_len].copy_from_slice(&checksum);
+    }
+
+    pub fn data(
+        &self,
+    ) -> Result<
+        Ref<&[u8], Pms7003DataFrame>,
+        zerocopy::ConvertError<
+            zerocopy::AlignmentError<&[u8], Pms7003DataFrame>,
+            zerocopy::SizeError<&[u8], Pms7003DataFrame>,
+            core::convert::Infallible,
+        >,
+    > {
+        Ref::<&[u8], Pms7003DataFrame>::from_bytes(&self.data_buffer)
+    }
 }
 
 impl<S, T> Pms7003Controller<S, T>
@@ -27,6 +45,53 @@ where
     S: Read + Write + ReadReady,
     T: crate::timer::TimerAlarm,
 {
+    pub fn passive(&mut self) -> Result<(), S::Error> {
+        let cmd = Pms7003CommandFrame::new(0xe1, 0.into());
+        self.cmd_buffer.copy_from_slice(cmd.as_bytes());
+
+        self.send_cmd()
+    }
+
+    pub fn active(&mut self) -> Result<(), S::Error> {
+        let cmd = Pms7003CommandFrame::new(0xe1, 1.into());
+        self.cmd_buffer.copy_from_slice(cmd.as_bytes());
+
+        self.send_cmd()
+    }
+
+    pub fn sleep(&mut self) -> Result<(), S::Error> {
+        let cmd = Pms7003CommandFrame::new(0xe4, 0.into());
+        self.cmd_buffer.copy_from_slice(cmd.as_bytes());
+
+        self.send_cmd()
+    }
+
+    pub fn wake(&mut self) -> Result<(), S::Error> {
+        let cmd = Pms7003CommandFrame::new(0xe4, 1.into());
+        self.cmd_buffer.copy_from_slice(cmd.as_bytes());
+
+        self.send_cmd()
+    }
+
+    pub fn read_passive(&mut self) -> Result<Ref<&[u8], Pms7003DataFrame>, S::Error> {
+        let cmd = Pms7003CommandFrame::new(0xe2, 0.into());
+        self.cmd_buffer.copy_from_slice(cmd.as_bytes());
+
+        self.send_cmd().expect("todo add error type");
+        self.uart
+            .read(&mut self.data_buffer)
+            .expect("todo add error type");
+        Ok(self.data().expect("todo add error type"))
+    }
+
+    fn send_cmd(&mut self) -> Result<(), S::Error> {
+        Self::write_checksum(&mut self.cmd_buffer);
+        if self.timer.is_ready() {
+            self.uart.write_all(&self.cmd_buffer)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 // impl<D: hal::uart::UartDevice, P: hal::uart::ValidUartPinout<D>> Pms7003Controller<D, P> {
@@ -42,39 +107,39 @@ where
 // }
 // }
 
-pub enum Pms7003Command {
-    PassiveRead,
-    ChangeMode(TransmissionMode),
-    SleepSet(SleepMode),
-}
+// pub enum Pms7003Command {
+//     PassiveRead,
+//     ChangeMode(TransmissionMode),
+//     SleepSet(SleepMode),
+// }
 
-#[repr(u16)]
-#[derive(Clone, Copy, Debug)]
-pub enum SleepMode {
-    Sleep = 0x0000,
-    WakeUp = 0x0001,
-}
+// #[repr(u16)]
+// #[derive(Clone, Copy, Debug)]
+// pub enum SleepMode {
+//     Sleep = 0x0000,
+//     WakeUp = 0x0001,
+// }
 
-#[repr(u16)]
-#[derive(Clone, Copy, Debug)]
-pub enum TransmissionMode {
-    Passive = 0x0000,
-    Active = 0x0001,
-}
+// #[repr(u16)]
+// #[derive(Clone, Copy, Debug)]
+// pub enum TransmissionMode {
+//     Passive = 0x0000,
+//     Active = 0x0001,
+// }
 
-impl From<Pms7003Command> for Pms7003CommandFrame {
-    fn from(value: Pms7003Command) -> Self {
-        let (cmd, data) = match value {
-            Pms7003Command::PassiveRead => (0xe2, 0u16),
-            Pms7003Command::ChangeMode(mode) => (0xe1, mode as u16),
-            Pms7003Command::SleepSet(mode) => (0xe4, mode as u16),
-        };
+// impl From<Pms7003Command> for Pms7003CommandFrame {
+//     fn from(value: Pms7003Command) -> Self {
+//         let (cmd, data) = match value {
+//             Pms7003Command::PassiveRead => (0xe2, 0u16),
+//             Pms7003Command::ChangeMode(mode) => (0xe1, mode as u16),
+//             Pms7003Command::SleepSet(mode) => (0xe4, mode as u16),
+//         };
 
-        Self {
-            magic: PMS7003MAGIC.into(),
-            cmd,
-            data: data.into(),
-            check_code: 0.into(),
-        }
-    }
-}
+//         Self {
+//             magic: PMS7003MAGIC.into(),
+//             cmd,
+//             data: data.into(),
+//             check_code: 0.into(),
+//         }
+//     }
+// }

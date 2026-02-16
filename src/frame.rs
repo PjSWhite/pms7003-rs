@@ -1,8 +1,10 @@
 use super::PmsU16Int;
-use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+
+const PMS7003MAGIC: PmsU16Int = PmsU16Int::new(0x424d);
 
 #[repr(C)]
-#[derive(FromBytes, Unaligned)]
+#[derive(FromBytes, Unaligned, Immutable, KnownLayout)]
 pub struct Pms7003DataFrame {
     magic: PmsU16Int,
     len: PmsU16Int,
@@ -28,8 +30,19 @@ pub struct Pms7003DataFrame {
 #[repr(C, packed)]
 #[derive(IntoBytes, Unaligned, Immutable, Clone, Copy)]
 pub(super) struct Pms7003CommandFrame {
-    pub(super) magic: PmsU16Int,
-    pub(super) cmd: u8,
-    pub(super) data: PmsU16Int,
-    pub(super) check_code: PmsU16Int,
+    magic: PmsU16Int,
+    cmd: u8,
+    data: PmsU16Int,
+    check_code: PmsU16Int,
+}
+
+impl Pms7003CommandFrame {
+    pub fn new(cmd: u8, data: PmsU16Int) -> Self {
+        Self {
+            magic: PMS7003MAGIC,
+            check_code: 0.into(),
+            cmd,
+            data,
+        }
+    }
 }
