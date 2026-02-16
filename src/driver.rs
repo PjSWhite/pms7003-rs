@@ -1,10 +1,15 @@
-use embedded_io::{Read, ReadReady, Write};
+use embedded_io::{Error, Read, ReadReady, Write};
 use zerocopy::{FromBytes, IntoBytes, Ref};
 
 use crate::frame::Pms7003CommandFrame;
 use crate::{Pms7003DataFrame, PmsU16Int};
 
 // type ActivatedUartDevice<D, P> = hal::uart::UartPeripheral<hal::uart::Enabled, D, P>;
+pub(super) type ConversionError<'a> = zerocopy::ConvertError<
+    zerocopy::AlignmentError<&'a [u8], Pms7003DataFrame>,
+    zerocopy::SizeError<&'a [u8], Pms7003DataFrame>,
+    core::convert::Infallible,
+>;
 
 pub struct Pms7003Controller<S, T> {
     uart: S,
@@ -26,17 +31,9 @@ impl<S, T> Pms7003Controller<S, T> {
         buf[..=rest_of_buf_len].copy_from_slice(&checksum);
     }
 
-    pub fn data(
-        &self,
-    ) -> Result<
-        Ref<&[u8], Pms7003DataFrame>,
-        zerocopy::ConvertError<
-            zerocopy::AlignmentError<&[u8], Pms7003DataFrame>,
-            zerocopy::SizeError<&[u8], Pms7003DataFrame>,
-            core::convert::Infallible,
-        >,
-    > {
+    pub fn data(&self) -> Result<Ref<&[u8], Pms7003DataFrame>, crate::Error> {
         Ref::<&[u8], Pms7003DataFrame>::from_bytes(&self.data_buffer)
+            .map_err(|_| crate::Error::Conversion)
     }
 }
 
@@ -45,49 +42,52 @@ where
     S: Read + Write + ReadReady,
     T: crate::timer::TimerAlarm,
 {
-    pub fn passive(&mut self) -> Result<(), S::Error> {
+    pub fn passive(&mut self) -> Result<(), crate::Error> {
         let cmd = Pms7003CommandFrame::new(0xe1, 0.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
 
         self.send_cmd()
     }
 
-    pub fn active(&mut self) -> Result<(), S::Error> {
+    pub fn active(&mut self) -> Result<(), crate::Error> {
         let cmd = Pms7003CommandFrame::new(0xe1, 1.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
 
         self.send_cmd()
     }
 
-    pub fn sleep(&mut self) -> Result<(), S::Error> {
+    pub fn sleep(&mut self) -> Result<(), crate::Error> {
         let cmd = Pms7003CommandFrame::new(0xe4, 0.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
 
         self.send_cmd()
     }
 
-    pub fn wake(&mut self) -> Result<(), S::Error> {
+    pub fn wake(&mut self) -> Result<(), crate::Error> {
         let cmd = Pms7003CommandFrame::new(0xe4, 1.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
 
         self.send_cmd()
     }
 
-    pub fn read_passive(&mut self) -> Result<Ref<&[u8], Pms7003DataFrame>, S::Error> {
+    pub fn read_passive(&mut self) -> Result<Ref<&[u8], Pms7003DataFrame>, crate::Error> {
         let cmd = Pms7003CommandFrame::new(0xe2, 0.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
 
-        self.send_cmd().expect("todo add error type");
+        self.send_cmd()?;
+
         self.uart
             .read(&mut self.data_buffer)
-            .expect("todo add error type");
-        Ok(self.data().expect("todo add error type"))
+            .map_err(|e| crate::Error::Write(e.kind()))?;
+        self.data()
     }
 
-    fn send_cmd(&mut self) -> Result<(), S::Error> {
+    fn send_cmd(&mut self) -> Result<(), crate::Error> {
         Self::write_checksum(&mut self.cmd_buffer);
         if self.timer.is_ready() {
-            self.uart.write_all(&self.cmd_buffer)
+            self.uart
+                .write_all(&self.cmd_buffer)
+                .map_err(|e| crate::Error::Write(e.kind()))
         } else {
             Ok(())
         }
