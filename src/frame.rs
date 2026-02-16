@@ -1,6 +1,5 @@
-use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned, byteorder};
-
-type PmsU16Int = byteorder::U16<byteorder::BigEndian>;
+use super::PmsU16Int;
+use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned};
 
 #[repr(C)]
 #[derive(FromBytes, Unaligned)]
@@ -28,9 +27,9 @@ pub struct Pms7003DataFrame {
 
 #[repr(C, packed)]
 #[derive(IntoBytes, Unaligned, Immutable, Clone, Copy)]
-struct Pms7003CommandFrame {
-    magic: PmsU16Int,
-    cmd: u8,
-    data: PmsU16Int,
-    check_code: PmsU16Int,
+pub(super) struct Pms7003CommandFrame {
+    pub(super) magic: PmsU16Int,
+    pub(super) cmd: u8,
+    pub(super) data: PmsU16Int,
+    pub(super) check_code: PmsU16Int,
 }
