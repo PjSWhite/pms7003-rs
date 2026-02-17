@@ -19,6 +19,15 @@ pub struct Pms7003Controller<S, T> {
 }
 
 impl<S, T> Pms7003Controller<S, T> {
+    pub fn new(uart: S, timer: T) -> Self {
+        Self {
+            uart,
+            timer,
+            data_buffer: [0; 32],
+            cmd_buffer: [0; 7],
+        }
+    }
+
     fn compute_checksum(buf: &[u8]) -> [u8; 2] {
         let sum: u8 = buf[..buf.len() - 2].iter().sum();
 
