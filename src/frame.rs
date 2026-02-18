@@ -1,7 +1,7 @@
 use super::PmsU16Int;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
-const PMS7003MAGIC: PmsU16Int = PmsU16Int::new(0x424d);
+pub(super) const PMS7003MAGIC: PmsU16Int = PmsU16Int::new(0x424d);
 
 #[repr(C)]
 #[derive(FromBytes, Unaligned, Immutable, KnownLayout)]
