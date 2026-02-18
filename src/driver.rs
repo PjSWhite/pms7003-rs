@@ -1,15 +1,16 @@
 use embedded_io::{Error, Read, ReadReady, Write};
-use zerocopy::{FromBytes, IntoBytes, Ref};
+use zerocopy::{IntoBytes, Ref};
 
 use crate::frame::Pms7003CommandFrame;
 use crate::{Pms7003DataFrame, PmsU16Int};
 
+pub type ReadResult<'a> = Result<Ref<&'a [u8], Pms7003DataFrame>, crate::Error>;
 // type ActivatedUartDevice<D, P> = hal::uart::UartPeripheral<hal::uart::Enabled, D, P>;
-pub(super) type ConversionError<'a> = zerocopy::ConvertError<
-    zerocopy::AlignmentError<&'a [u8], Pms7003DataFrame>,
-    zerocopy::SizeError<&'a [u8], Pms7003DataFrame>,
-    core::convert::Infallible,
->;
+// pub(super) type ConversionError<'a> = zerocopy::ConvertError<
+//     zerocopy::AlignmentError<&'a [u8], Pms7003DataFrame>,
+//     zerocopy::SizeError<&'a [u8], Pms7003DataFrame>,
+//     core::convert::Infallible,
+// >;
 
 pub struct Pms7003Controller<S, T> {
     uart: S,
@@ -40,9 +41,33 @@ impl<S, T> Pms7003Controller<S, T> {
         buf[..=rest_of_buf_len].copy_from_slice(&checksum);
     }
 
-    pub fn data(&self) -> Result<Ref<&[u8], Pms7003DataFrame>, crate::Error> {
+    pub fn has_data(&self) -> bool {
+        let start_code = PmsU16Int::from_bytes(self.data_buffer[..2].try_into().unwrap());
+        start_code == crate::frame::PMS7003MAGIC
+    }
+
+    pub fn verify_data_frame(&self) -> bool {
+        let computed_checksum = u16::from_be_bytes(Self::compute_checksum(&self.data_buffer));
+        let checksum_provided = u16::from_be_bytes(
+            self.data_buffer[self.data_buffer.len() - 2..]
+                .try_into()
+                .unwrap(),
+        );
+
+        computed_checksum == checksum_provided
+    }
+
+    pub fn data(&self) -> ReadResult<'_> {
         Ref::<&[u8], Pms7003DataFrame>::from_bytes(&self.data_buffer)
             .map_err(|_| crate::Error::Conversion)
+    }
+
+    pub fn timer(&self) -> &T {
+        &self.timer
+    }
+
+    pub fn timer_mut(&mut self) -> &mut T {
+        &mut self.timer
     }
 }
 
@@ -98,7 +123,7 @@ where
                 .write_all(&self.cmd_buffer)
                 .map_err(|e| crate::Error::Write(e.kind()))
         } else {
-            Ok(())
+            Err(crate::Error::WarmUp)
         }
     }
 }
