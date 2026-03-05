@@ -1,4 +1,5 @@
-use embedded_io::{Error, Read, ReadReady, Write};
+use embedded_io::{Error, Read, ReadExactError, ReadReady, Write};
+use log::debug;
 use zerocopy::{IntoBytes, Ref};
 
 use crate::frame::Pms7003CommandFrame;
@@ -30,15 +31,15 @@ impl<S, T> Pms7003Controller<S, T> {
     }
 
     fn compute_checksum(buf: &[u8]) -> [u8; 2] {
-        let sum: u8 = buf[..buf.len() - 2].iter().sum();
+        let sum: u16 = buf[..buf.len() - 2].iter().map(|&b| b as u16).sum();
 
-        PmsU16Int::new(sum as u16).to_bytes()
+        PmsU16Int::new(sum).to_bytes()
     }
 
     fn write_checksum(buf: &mut [u8]) {
         let rest_of_buf_len = buf.len() - 2;
         let checksum = Self::compute_checksum(buf);
-        buf[..=rest_of_buf_len].copy_from_slice(&checksum);
+        buf[rest_of_buf_len..].copy_from_slice(&checksum);
     }
 
     pub fn has_data(&self) -> bool {
@@ -76,6 +77,32 @@ where
     S: Read + Write + ReadReady,
     T: crate::timer::TimerAlarm,
 {
+    fn read_buffer(&mut self) -> Result<(), crate::Error> {
+        self.uart
+            .read_exact(&mut self.data_buffer)
+            .map_err(|e| match e {
+                ReadExactError::UnexpectedEof => crate::Error::Conversion,
+                ReadExactError::Other(e) => crate::Error::ReadWrite(e.kind()),
+            })?;
+
+        let magic_pos = self
+            .data_buffer
+            .windows(2)
+            .position(|w| w == [0x42, 0x4d])
+            .ok_or(crate::Error::Conversion)?;
+
+        if magic_pos != 0 {
+            self.data_buffer.rotate_left(magic_pos);
+            let tail = &mut self.data_buffer[32 - magic_pos..];
+            self.uart.read_exact(tail).map_err(|e| match e {
+                ReadExactError::UnexpectedEof => crate::Error::Conversion,
+                ReadExactError::Other(e) => crate::Error::ReadWrite(e.kind()),
+            })?;
+        }
+
+        Ok(())
+    }
+
     pub fn passive(&mut self) -> Result<(), crate::Error> {
         let cmd = Pms7003CommandFrame::new(0xe1, 0.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
@@ -109,10 +136,9 @@ where
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
 
         self.send_cmd()?;
+        self.read_buffer()?;
 
-        self.uart
-            .read(&mut self.data_buffer)
-            .map_err(|e| crate::Error::Write(e.kind()))?;
+        debug!("Raw data frame read from sensor: {:x?}", self.data_buffer);
         self.data()
     }
 
@@ -121,7 +147,7 @@ where
         if self.timer.is_ready() {
             self.uart
                 .write_all(&self.cmd_buffer)
-                .map_err(|e| crate::Error::Write(e.kind()))
+                .map_err(|e| crate::Error::ReadWrite(e.kind()))
         } else {
             Err(crate::Error::WarmUp)
         }

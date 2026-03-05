@@ -5,5 +5,5 @@ use embedded_io::ErrorKind;
 pub enum Error {
     WarmUp,
     Conversion,
-    Write(ErrorKind),
+    ReadWrite(ErrorKind),
 }
