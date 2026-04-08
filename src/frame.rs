@@ -4,7 +4,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 pub(super) const PMS7003MAGIC: PmsU16Int = PmsU16Int::new(0x424d);
 
 #[repr(C)]
-#[derive(FromBytes, Unaligned, Immutable, KnownLayout, Default)]
+#[derive(FromBytes, Unaligned, Immutable, KnownLayout, Default, Debug)]
 pub struct Pms7003DataFrame {
     magic: PmsU16Int,
     len: PmsU16Int,
