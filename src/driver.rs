@@ -74,8 +74,7 @@ impl<S, T> Pms7003Controller<S, T> {
 
 impl<S, T> Pms7003Controller<S, T>
 where
-    S: Read + Write + ReadReady,
-    T: crate::timer::TimerAlarm,
+    S: Write + Read + ReadReady,
 {
     fn read_buffer(&mut self) -> Result<(), crate::Error> {
         self.uart
@@ -102,7 +101,13 @@ where
 
         Ok(())
     }
+}
 
+impl<S, T> Pms7003Controller<S, T>
+where
+    S: Read + Write + ReadReady,
+    T: crate::TimerAlarm,
+{
     pub fn passive(&mut self) -> Result<(), crate::Error> {
         let cmd = Pms7003CommandFrame::new(0xe1, 0.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
@@ -144,16 +149,13 @@ where
 
     fn send_cmd(&mut self) -> Result<(), crate::Error> {
         Self::write_checksum(&mut self.cmd_buffer);
-        if self.timer.is_ready() {
-            self.uart
-                .write_all(&self.cmd_buffer)
-                .map_err(|e| crate::Error::ReadWrite(e.kind()))
-        } else {
-            Err(crate::Error::WarmUp)
-        }
+        self.timer.schedule(T::from_seconds(30));
+
+        self.uart
+            .write_all(&self.cmd_buffer)
+            .map_err(|e| crate::Error::ReadWrite(e.kind()))
     }
 }
-
 // impl<D: hal::uart::UartDevice, P: hal::uart::ValidUartPinout<D>> Pms7003Controller<D, P> {
 //     pub fn send_cmd(&mut self, cmd: Pms7003Command) {
 //         let cmd_frame: Pms7003CommandFrame = cmd.into();
