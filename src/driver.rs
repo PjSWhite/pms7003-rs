@@ -128,10 +128,16 @@ where
         let cmd = Pms7003CommandFrame::new(0xe4, 1.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
 
-        self.send_cmd()
+        self.send_cmd()?;
+        self.timer.schedule(T::from_seconds(30));
+
+        Ok(())
     }
 
     pub fn read_passive(&mut self) -> Result<Ref<&[u8], Pms7003DataFrame>, crate::Error> {
+        if !self.timer.is_ready() {
+            return Err(crate::Error::WarmUp);
+        }
         let cmd = Pms7003CommandFrame::new(0xe2, 0.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
 
@@ -144,8 +150,6 @@ where
 
     fn send_cmd(&mut self) -> Result<(), crate::Error> {
         Self::write_checksum(&mut self.cmd_buffer);
-        self.timer.schedule(T::from_seconds(30));
-
         self.uart
             .write_all(&self.cmd_buffer)
             .map_err(|e| crate::Error::ReadWrite(e.kind()))
