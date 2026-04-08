@@ -74,7 +74,8 @@ impl<S, T> Pms7003Controller<S, T> {
 
 impl<S, T> Pms7003Controller<S, T>
 where
-    S: Write + Read + ReadReady,
+    S: Read + Write + ReadReady,
+    T: crate::TimerAlarm,
 {
     fn read_buffer(&mut self) -> Result<(), crate::Error> {
         self.uart
@@ -101,13 +102,7 @@ where
 
         Ok(())
     }
-}
 
-impl<S, T> Pms7003Controller<S, T>
-where
-    S: Read + Write + ReadReady,
-    T: crate::TimerAlarm,
-{
     pub fn passive(&mut self) -> Result<(), crate::Error> {
         let cmd = Pms7003CommandFrame::new(0xe1, 0.into());
         self.cmd_buffer.copy_from_slice(cmd.as_bytes());
