@@ -11,6 +11,7 @@ pub use error::Error;
 pub use frame::Pms7003DataFrame;
 pub use timer::{NoAlarm, TimerAlarm};
 
-use zerocopy::byteorder;
+use zerocopy::{Ref, byteorder};
 
 type PmsU16Int = byteorder::U16<byteorder::BigEndian>;
+pub type DataFrameResult<'a> = Result<Ref<&'a [u8], Pms7003DataFrame>, Error>;
