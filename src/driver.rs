@@ -154,6 +154,14 @@ where
             .write_all(&self.cmd_buffer)
             .map_err(|e| crate::Error::ReadWrite(e.kind()))
     }
+
+    pub fn flush_data(&mut self) {
+        let mut trash: [u8; 1] = [0; 1];
+
+        while self.uart.read_ready().unwrap_or_default() {
+            self.uart.read(&mut trash).ok();
+        }
+    }
 }
 // impl<D: hal::uart::UartDevice, P: hal::uart::ValidUartPinout<D>> Pms7003Controller<D, P> {
 //     pub fn send_cmd(&mut self, cmd: Pms7003Command) {
