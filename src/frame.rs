@@ -26,7 +26,6 @@ pub struct Pms7003DataFrame {
     _reserved: PmsU16Int,
     check_code: PmsU16Int,
 }
-
 #[repr(C, packed)]
 #[derive(IntoBytes, Unaligned, Immutable, Clone, Copy)]
 pub(super) struct Pms7003CommandFrame {
