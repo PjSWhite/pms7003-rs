@@ -1,6 +1,9 @@
-// #[cfg(all(feature = "rp2040-impl", not(feature = "embedded-hal-impl")))]
-#[cfg(feature = "rp2040-impl")]
+#[cfg(all(feature = "rp2040-impl", not(feature = "embedded-impl")))]
+// #[cfg(feature = "rp2040-impl")]
 use rp2040_hal::fugit::MicrosDurationU32;
+
+#[cfg(all(feature = "embedded-impl", not(feature = "rp2040-impl")))]
+use embedded_hal::delay::DelayNs;
 
 pub trait TimerAlarm {
     type Countdown;
@@ -24,8 +27,27 @@ impl TimerAlarm for NoAlarm {
     fn schedule(&mut self, _countdown: Self::Countdown) {}
 }
 
-// #[cfg(all(feature = "rp2040-impl", not(feature = "embedded-hal-impl")))]
-#[cfg(feature = "rp2040-impl")]
+#[cfg(all(feature = "embedded-impl", not(feature = "rp2040-impl")))]
+impl<T> TimerAlarm for T
+where
+    T: DelayNs,
+{
+    type Countdown = u32;
+
+    fn from_seconds(secs: u32) -> Self::Countdown {
+        secs.saturating_mul(1000)
+    }
+
+    fn schedule(&mut self, countdown: Self::Countdown) {
+        self.delay_ms(countdown);
+    }
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(all(feature = "rp2040-impl", not(feature = "embedded-impl")))]
 impl<T> TimerAlarm for T
 where
     T: rp2040_hal::timer::Alarm,
