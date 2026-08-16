@@ -26,6 +26,13 @@ pub struct Pms7003DataFrame {
     _reserved: PmsU16Int,
     check_code: PmsU16Int,
 }
+
+impl Pms7003DataFrame {
+    pub fn is_valid(&self) -> bool {
+        self.magic == PMS7003MAGIC
+    }
+}
+
 #[repr(C, packed)]
 #[derive(IntoBytes, Unaligned, Immutable, Clone, Copy)]
 pub(super) struct Pms7003CommandFrame {
