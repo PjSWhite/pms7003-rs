@@ -74,7 +74,7 @@ impl<S, T> Pms7003Controller<S, T> {
 
 impl<S, T> Pms7003Controller<S, T>
 where
-    S: Read + Write + ReadReady,
+    S: Read + Write,
     T: crate::TimerAlarm,
 {
     fn read_buffer(&mut self) -> Result<(), crate::Error> {
@@ -154,7 +154,13 @@ where
             .write_all(&self.cmd_buffer)
             .map_err(|e| crate::Error::ReadWrite(e.kind()))
     }
+}
 
+impl<S, T> Pms7003Controller<S, T>
+where
+    S: Read + ReadReady,
+    // T: crate::TimerAlarm,
+{
     pub fn flush_data(&mut self) {
         let mut trash: [u8; 1] = [0; 1];
 
